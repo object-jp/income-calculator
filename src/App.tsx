@@ -218,8 +218,8 @@ const App: React.FC = () => {
             <h2>計算結果</h2>
             <p>収入合計: {calculateTotal("income").toLocaleString()} 円</p>
             <p>支出合計: {calculateTotal("expense").toLocaleString()} 円</p>
-            <p>課税所得: {taxableIncome.toLocaleString()} 円</p>
-            <p>所得税: {tax.toLocaleString()} 円</p>
+            <p>課税雑所得: {taxableIncome.toLocaleString()} 円</p>
+            <p>必要税額: {tax.toLocaleString()} 円</p>
           </div>
         </div>
       ) : (
