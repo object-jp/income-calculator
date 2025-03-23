@@ -1,6 +1,10 @@
+// App.tsx
 import React, { useState, useEffect } from "react";
 import "./App.css";
+import { app, auth } from "./firebaseConfig";
+import { signOut, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 
+// 入力されるエントリーの型定義
 interface Entry {
   id: number;
   type: "income" | "expense";
@@ -9,25 +13,54 @@ interface Entry {
 }
 
 const App: React.FC = () => {
-  const loadEntriesFromLocalStorage = (): Entry[] => {
-    const storedEntries = localStorage.getItem("entries");
-    if (storedEntries) {
-      return JSON.parse(storedEntries);
-    }
-    return [];
-  };
-
-  const [entries, setEntries] = useState<Entry[]>(loadEntriesFromLocalStorage());
+  const [user, setUser] = useState<any>(null);
+  const [error, setError] = useState("");
+  const [entries, setEntries] = useState<{ [key: string]: Entry[] }>({});
   const [type, setType] = useState<"income" | "expense">("income");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState<number | string>("");
   const [hasOtherIncome, setHasOtherIncome] = useState(false);
 
-  // エントリーを追加したときにローカルストレージに保存
+  // ユーザーの認証状態を監視
   useEffect(() => {
-    localStorage.setItem("entries", JSON.stringify(entries));
-  }, [entries]);
+    const unsubscribe = auth.onAuthStateChanged(setUser);
+    return () => unsubscribe();
+  }, []);
 
+  // サインアウト処理
+  const handleSignOut = () => {
+    signOut(auth)
+      .then(() => {
+        setUser(null);
+      })
+      .catch((error) => {
+        setError(error.message);
+      });
+  };
+
+  // Googleサインイン処理
+  const handleGoogleSignIn = () => {
+    const provider = new GoogleAuthProvider();
+    signInWithPopup(auth, provider)
+      .then((result) => {
+        setUser(result.user);
+      })
+      .catch((error) => {
+        setError(error.message);
+      });
+  };
+
+  // ユーザーの収入・支出を更新
+  useEffect(() => {
+    if (user) {
+      setEntries((prevEntries) => ({
+        ...prevEntries,
+        [user.uid]: prevEntries[user.uid] || [],
+      }));
+    }
+  }, [user]);
+
+  // エントリーの追加処理
   const addEntry = () => {
     if (!description || !amount) {
       alert("概要と金額を入力してください");
@@ -41,35 +74,47 @@ const App: React.FC = () => {
       amount: Number(amount),
     };
 
-    setEntries([...entries, newEntry]);
+    setEntries((prevEntries) => ({
+      ...prevEntries,
+      [user.uid]: [...(prevEntries[user.uid] || []), newEntry],
+    }));
+
     setDescription("");
     setAmount("");
   };
 
+  // エントリーの削除処理
   const deleteEntry = (id: number) => {
-    const updatedEntries = entries.filter((entry) => entry.id !== id);
-    setEntries(updatedEntries);
+    setEntries((prevEntries) => ({
+      ...prevEntries,
+      [user.uid]: prevEntries[user.uid].filter((entry) => entry.id !== id),
+    }));
   };
 
+  // 収入・支出の合計を計算
   const calculateTotal = (type: "income" | "expense") => {
-    return entries
+    if (!user) return 0;
+    return (entries[user.uid] || [])
       .filter((entry) => entry.type === type)
       .reduce((sum, entry) => sum + entry.amount, 0);
   };
 
+  // 課税所得を計算
   const calculateTaxableIncome = () => {
     const totalIncome = calculateTotal("income");
     const totalExpense = calculateTotal("expense");
 
     let taxableIncome = totalIncome - totalExpense;
 
+    // 他の収入がない場合は基礎控除（48万円）を差し引く
     if (!hasOtherIncome) {
-      taxableIncome -= 480000; // 基礎控除 48万円
+      taxableIncome -= 480000;
     }
 
     return taxableIncome > 0 ? taxableIncome : 0;
   };
 
+  // 所得税を計算
   const calculateTax = (income: number) => {
     if (income <= 200000) return 0;
     if (income <= 1950000) return income * 0.05;
@@ -107,70 +152,82 @@ const App: React.FC = () => {
     <div className="App">
       <h1>収入・支出管理</h1>
 
-      <div className="form">
-        <select
-          className="form-select"
-          value={type}
-          onChange={(e) => setType(e.target.value as "income" | "expense")}
-        >
-          <option value="income">収入</option>
-          <option value="expense">支出</option>
-        </select>
+      {user ? (
+        <div>
+          <p>Welcome, {user.displayName || user.email}!</p>
+          <button onClick={handleSignOut}>ログアウト</button>
 
-        <input
-          className="form-input"
-          type="text"
-          placeholder="概要"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-
-        <input
-          className="form-input"
-          type="number"
-          placeholder="金額"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-
-        <button className="form-button" onClick={addEntry}>追加</button>
-      </div>
-
-      <div className="checkbox">
-        <label>
-          <input
-            type="checkbox"
-            checked={hasOtherIncome}
-            onChange={(e) => setHasOtherIncome(e.target.checked)}
-          />
-          他の収入（給与など）がある
-        </label>
-      </div>
-
-      <div className="list">
-        <h2>項目一覧</h2>
-        {entries.map((entry) => (
-          <div key={entry.id} className={`entry ${entry.type}`}>
-            <span>{entry.type === "income" ? "収入" : "支出"}</span>
-            <span>{entry.description}</span>
-            <span>{entry.amount.toLocaleString()} 円</span>
-            <button
-              className="delete-button"
-              onClick={() => deleteEntry(entry.id)}
+          <div className="form">
+            <select
+              className="form-select"
+              value={type}
+              onChange={(e) => setType(e.target.value as "income" | "expense")}
             >
-              削除
-            </button>
-          </div>
-        ))}
-      </div>
+              <option value="income">収入</option>
+              <option value="expense">支出</option>
+            </select>
 
-      <div className="totals">
-        <h2>計算結果</h2>
-        <p>収入合計: {calculateTotal("income").toLocaleString()} 円</p>
-        <p>支出合計: {calculateTotal("expense").toLocaleString()} 円</p>
-        <p>課税所得: {taxableIncome.toLocaleString()} 円</p>
-        <p>所得税: {tax.toLocaleString()} 円</p>
-      </div>
+            <input
+              className="form-input"
+              type="text"
+              placeholder="概要"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+
+            <input
+              className="form-input"
+              type="number"
+              placeholder="金額"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+
+            <button className="form-button" onClick={addEntry}>追加</button>
+          </div>
+
+          <div className="checkbox">
+            <label>
+              <input
+                type="checkbox"
+                checked={hasOtherIncome}
+                onChange={(e) => setHasOtherIncome(e.target.checked)}
+              />
+              他の収入（給与など）がある
+            </label>
+          </div>
+
+          <div className="list">
+            <h2>項目一覧</h2>
+            {(entries[user.uid] || []).map((entry) => (
+              <div key={entry.id} className={`entry ${entry.type}`}>
+                <span>{entry.type === "income" ? "収入" : "支出"}</span>
+                <span>{entry.description}</span>
+                <span>{entry.amount.toLocaleString()} 円</span>
+                <button
+                  className="delete-button"
+                  onClick={() => deleteEntry(entry.id)}
+                >
+                  削除
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="totals">
+            <h2>計算結果</h2>
+            <p>収入合計: {calculateTotal("income").toLocaleString()} 円</p>
+            <p>支出合計: {calculateTotal("expense").toLocaleString()} 円</p>
+            <p>課税所得: {taxableIncome.toLocaleString()} 円</p>
+            <p>所得税: {tax.toLocaleString()} 円</p>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <button onClick={handleGoogleSignIn}>Googleでサインイン</button>
+          {error && <p style={{ color: "red" }}>{error}</p>}
+        </div>
+      )}
     </div>
   );
 };
