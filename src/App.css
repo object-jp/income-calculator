@@ -69,6 +69,23 @@ h1 {
 .form-button:hover {
     background-color: #0056b3;
 }
+
+/* 削除ボタン */
+.delete-button {
+    background-color: #dc3545;
+    color: #ffffff;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    font-size: 0.9rem;
+}
+
+.delete-button:hover {
+    background-color: #c82333;
+}
+
   
 /* チェックボックスのラベル */
 .checkbox {

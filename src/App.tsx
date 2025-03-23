@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import "./App.css"
+import React, { useState, useEffect } from "react";
+import "./App.css";
 
 interface Entry {
   id: number;
@@ -9,11 +9,24 @@ interface Entry {
 }
 
 const App: React.FC = () => {
-  const [entries, setEntries] = useState<Entry[]>([]);
+  const loadEntriesFromLocalStorage = (): Entry[] => {
+    const storedEntries = localStorage.getItem("entries");
+    if (storedEntries) {
+      return JSON.parse(storedEntries);
+    }
+    return [];
+  };
+
+  const [entries, setEntries] = useState<Entry[]>(loadEntriesFromLocalStorage());
   const [type, setType] = useState<"income" | "expense">("income");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState<number | string>("");
   const [hasOtherIncome, setHasOtherIncome] = useState(false);
+
+  // エントリーを追加したときにローカルストレージに保存
+  useEffect(() => {
+    localStorage.setItem("entries", JSON.stringify(entries));
+  }, [entries]);
 
   const addEntry = () => {
     if (!description || !amount) {
@@ -33,6 +46,11 @@ const App: React.FC = () => {
     setAmount("");
   };
 
+  const deleteEntry = (id: number) => {
+    const updatedEntries = entries.filter((entry) => entry.id !== id);
+    setEntries(updatedEntries);
+  };
+
   const calculateTotal = (type: "income" | "expense") => {
     return entries
       .filter((entry) => entry.type === type)
@@ -49,12 +67,11 @@ const App: React.FC = () => {
       taxableIncome -= 480000; // 基礎控除 48万円
     }
 
-    return taxableIncome > 0 ? taxableIncome : 0; // 課税所得が負なら0に
+    return taxableIncome > 0 ? taxableIncome : 0;
   };
 
   const calculateTax = (income: number) => {
     if (income <= 200000) return 0;
-
     if (income <= 1950000) return income * 0.05;
     if (income <= 3300000) return 1950000 * 0.05 + (income - 1950000) * 0.1;
     if (income <= 6950000)
@@ -137,6 +154,12 @@ const App: React.FC = () => {
             <span>{entry.type === "income" ? "収入" : "支出"}</span>
             <span>{entry.description}</span>
             <span>{entry.amount.toLocaleString()} 円</span>
+            <button
+              className="delete-button"
+              onClick={() => deleteEntry(entry.id)}
+            >
+              削除
+            </button>
           </div>
         ))}
       </div>
